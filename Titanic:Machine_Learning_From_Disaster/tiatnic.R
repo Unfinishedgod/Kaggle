@@ -9,3 +9,7 @@ train_set <- read_csv("train.csv")
 test_set <- read_csv("test.csv")
 
 submission <- read_csv("gender_submission.csv")
+
+sapply(test_set, function(x) {
+  sum(is.na(x))
+})
