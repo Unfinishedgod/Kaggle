@@ -23,7 +23,6 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE,fig.width=11)
 
 
 
-
 ```{r}
 library(tidyverse)
 library(lubridate)
@@ -32,6 +31,7 @@ library(caret)
 library(readr)
 library(plotly)
 library(gridExtra)
+library(xgboost)
 
 
 train_set <- read_csv("train.csv")
@@ -69,8 +69,8 @@ train_set <- train_set %>%
     prob = c(0.7, 0.3) # Set weights for each group here
   ))
 
-train_set$season <- as.factor(train_set$season)
-levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
+# train_set$season <- as.factor(train_set$season)
+# levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
 
 train_set <- train_set %>% 
   mutate(hour = hour(datetime))
@@ -245,6 +245,32 @@ fit_test <- data.frame("Predict"=predict(temp.model,newdata=data.frame(temp=vali
 ## Important Finding
 # This sort of model doesn’t work well given our seasonal and time series data. We need a model that can account for this type of trend. We will get thrown off with the growth of our dataset accidentaly attributing to the winter season instead of realizing it’s just overall demand growing.
 ```
+
+```{r}
+X_train = train_set_2 %>% select(-count, - datetime, -group) %>% as.matrix()
+y_train = train_set_2$count
+
+dtrain = xgb.DMatrix(X_train, label = y_train)
+model = xgb.train(data = dtrain, 
+                  nround = 150, 
+                  max_depth = 5, 
+                  eta = 0.1, 
+                  subsample = 0.9)
+
+xgb.importance(feature_names = colnames(X_train), model) %>% 
+  xgb.plot.importance()
+```
+
+```{r}
+X_test = test_set %>% select(- datetime) %>% as.matrix()
+y_test = test_set$count
+
+preds = predict(model, X_test)
+preds = expm1(preds)
+solution = data.frame(datetime = test$datetime, count = preds)
+write.csv(solution, "solution.csv", row.names = FALSE)
+```
+
 
 ```{r}
 temp.model <- lm(count ~ temp, train_set_2)

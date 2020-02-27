@@ -3,6 +3,8 @@ library(lubridate)
 library(stringr)
 library(caret)
 library(readr)
+library(gridExtra)
+library(xgboost)
 
 
 train_set <- read_csv("train.csv")
@@ -29,7 +31,8 @@ submission <- read_csv("sampleSubmission.csv")
 
 
 # remove casual registered
-train_set <- train_set[,-c(10:11)]
+train_set <- train_set %>% 
+  select(-casual, -registered)
 
 train_set <- train_set %>% 
   mutate(group = sample(
@@ -39,6 +42,22 @@ train_set <- train_set %>%
     prob = c(0.7, 0.3) # Set weights for each group here
   ))
 
+# train_set$season <- as.factor(train_set$season)
+# levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
+
+train_set <- train_set %>%
+  mutate(day = ymd(str_sub(datetime[,1],1,10))) %>%
+  mutate(hour = ymd_h(str_sub(datetime[,1],1,13))) %>%
+  mutate(minute = ymd_hm(str_sub(datetime[,1],1,16)))
+
+test_set <- test_set %>%
+  mutate(datetime = fastPOSIXct(datetime, "GMT")) %>%
+  mutate(hour = hour(datetime),
+         month = month(datetime),
+         year = year(datetime),
+         wday = wday(datetime))
+
+train_set_2 <- train_set
 
 valid_set <- train_set %>% 
   filter(group == "valid")
@@ -67,21 +86,25 @@ head(valid_set)
 
 # Temperature v Count plot
 # Scatter Plot to show the relationship between count (number of total rentals) and temp (temperature in Celsius)
-ggplot(data = train_set, aes(temp,count)) +
+aa <- ggplot(data = train_set, aes(temp,count)) +
   geom_point(alpha=.2,aes(color=temp)) +
   ggtitle("Count vs Temperature") + xlab("Temp (Celsius)") +
   ylab("Rental Count") + labs(color='Temp(C)') +
-  theme_bw()
+  theme_bw() +  
+  theme(legend.position = "bottom")
 
 
 # Scatter Plot to show the relationship between count (number of total rentals) and date time.
-ggplot(data = train_set, aes(datetime,count)) +
+bb <- ggplot(data = train_set, aes(datetime,count)) +
   geom_point(alpha = .2,aes(color=temp)) +
   scale_colour_continuous(low = "yellow", high = 'red') + theme_bw() +
   ggtitle("Count vs Datetime") + 
   xlab("Date") + 
   ylab("Rental Count") +
-  labs(color='Temp(C)')
+  labs(color='Temp(C)') + 
+  theme(legend.position = "bottom")
+
+grid.arrange(aa, bb, ncol=2)
 
 # There is a clear seasonal trend where the total rental bikes seems to decrease during Winters i.e month of January and Feburary of the year and the total rental bikes seems to increase during summers.
 
@@ -95,8 +118,8 @@ cor(train_set[,c('temp','count')])
 # There is not so strong correlation between temp and count.
 
 ## Box Plot
-train_set$season <- as.factor(train_set$season)
-levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
+
+
 ggplot(data=train_set,aes(season,count,color = season)) +
   geom_boxplot( alpha = .2) + 
   ggtitle("Rental count by season") + 
@@ -111,10 +134,6 @@ ggplot(data=train_set,aes(season,count,color = season)) +
 ## Feature Engineering
 # As part of feature engineering I have added an hour column in the dataset.
 
-train_set$hour <- sapply(train_set$datetime,function(x){format(x,"%H")})
-train_set$hour <- sapply(train_set$hour,as.numeric)
-
-print(head(train_set))
 
 
 ## Relationship between hour of the working day and the count of bikes rented.
@@ -127,12 +146,14 @@ ggplot(filter(train_set,workingday == 1), aes(hour,count)) +
 #   scale_color_gradientn(colours = c('dark blue','blue','light blue','light green','yellow','orange','red')) +
 #   theme_bw()
 
-train_set %>% 
+aa <- train_set %>% 
   filter(workingday == 1) %>%
   ggplot(aes(hour,count)) +
   geom_point( alpha = .5,position = position_jitter(w=1,h=0),aes(color=temp)) +
   scale_color_gradientn(colors = c('blue','green','yellow','red')) +
-  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") + labs(color='Temp(C)') 
+  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") +
+  labs(color='Temp(C)') +  
+  theme(legend.position = "bottom")
 
 # This plot gives an interesting finding regarding temperature and bike rental count. As the temperature increases i.e. gets hotter the count of bike rental increases and for cold temperature there is a decline in count of bike rental.
 
@@ -144,14 +165,17 @@ train_set %>%
 #   theme_bw()
 
 
-train_set %>% 
+bb <- train_set %>% 
   filter(workingday == 0) %>%
   ggplot(aes(hour,count)) +
   geom_point( alpha = .5,position = position_jitter(w=1,h=0),aes(color=temp)) +
   scale_color_gradientn(colors = c('blue','green','yellow','red')) +
-  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") + labs(color='Temp(C)') 
+  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") + 
+  labs(color='Temp(C)') +  
+  theme(legend.position = "bottom")
 
 
+grid.arrange(aa,bb, ncol=2)
 
 ## Model Building
 # This model will be predicting the count of the bike rental based on the temp variable.
@@ -195,9 +219,54 @@ fit_test <- data.frame("Predict"=predict(temp.model,newdata=data.frame(temp=vali
 # windspeed
 # hour (factor)
 
-model <- lm(count ~ . - datetime - atemp, train_set)
-print(summary(model))
+
+# model <- lm(count ~ ., train_set)
+# print(summary(model))
 
 
 ## Important Finding
 # This sort of model doesn’t work well given our seasonal and time series data. We need a model that can account for this type of trend. We will get thrown off with the growth of our dataset accidentaly attributing to the winter season instead of realizing it’s just overall demand growing.
+
+X_train = train_set_2 %>% select(-count, - datetime, -group) %>% as.matrix()
+y_train = train_set_2$count
+
+dtrain = xgb.DMatrix(X_train, label = y_train)
+model = xgb.train(data = dtrain, 
+                  nround = 150, 
+                  max_depth = 5, 
+                  eta = 0.1, 
+                  subsample = 0.9)
+
+xgb.importance(feature_names = colnames(X_train), model) %>% 
+  xgb.plot.importance()
+
+X_test = test_set %>% select(- datetime) %>% as.matrix()
+y_test = test_set$count
+
+preds = predict(model, X_test)
+preds = expm1(preds)
+solution = data.frame(datetime = test$datetime, count = preds)
+write.csv(solution, "solution.csv", row.names = FALSE)
+
+
+temp.model <- lm(count ~ temp, train_set_2)
+print(summary(temp.model))
+
+
+## Model Interpretation
+# ** Based on the value of Intercept which is 6.0462, linear regression model predicts that there will be 6 bike rental when the temperature is 0. ** For temp variable Estimated Std. value is 9.1705 which signigies that a temperature increase of 1 celsius holding all things equal is associated with a rental increase of about 9.1 bikes.
+# ** The above findings is not a Causation and Beta 1 would be negative if an increase in temperature was associated with a decrease in rentals.
+# 
+# Next we want to know is how many bikes would we predict to be rented if the temperature was 25 degrees celsius.
+
+
+## How many rented bikes at temperature 25 degrees celsius
+temp.model$coefficients[1]+ temp.model$coefficients[2] * 25
+
+temp.test <- data.frame(temp=c(25))
+predict(temp.model,temp.test)
+
+
+data.frame("datetime" = test_set$datetime,"count"=predict(temp.model,newdata=data.frame(temp=test_set$temp))) %>% 
+  write.csv("bike_sharing_test.csv", row.names = FALSE)
+
