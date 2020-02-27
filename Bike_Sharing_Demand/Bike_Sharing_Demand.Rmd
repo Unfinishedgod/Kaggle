@@ -1,8 +1,23 @@
+---
+title: "bike_sharing(Doing)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE,fig.width=11)
+
+# knitr::opts_chunk$set(fig.path="Figs/", message=FALSE, warning=FALSE,
+#                       echo=FALSE, results="hide", fig.width=11)
+```
+
+```{r}
 library(tidyverse)
 library(lubridate)
 library(stringr)
 library(caret)
 library(readr)
+library(plotly)
+library(gridExtra)
 
 
 train_set <- read_csv("train.csv")
@@ -67,21 +82,25 @@ head(valid_set)
 
 # Temperature v Count plot
 # Scatter Plot to show the relationship between count (number of total rentals) and temp (temperature in Celsius)
-ggplot(data = train_set, aes(temp,count)) +
+aa <- ggplot(data = train_set, aes(temp,count)) +
   geom_point(alpha=.2,aes(color=temp)) +
   ggtitle("Count vs Temperature") + xlab("Temp (Celsius)") +
   ylab("Rental Count") + labs(color='Temp(C)') +
-  theme_bw()
+  theme_bw() +  
+  theme(legend.position = "bottom")
 
 
 # Scatter Plot to show the relationship between count (number of total rentals) and date time.
-ggplot(data = train_set, aes(datetime,count)) +
+bb <- ggplot(data = train_set, aes(datetime,count)) +
   geom_point(alpha = .2,aes(color=temp)) +
   scale_colour_continuous(low = "yellow", high = 'red') + theme_bw() +
   ggtitle("Count vs Datetime") + 
   xlab("Date") + 
   ylab("Rental Count") +
-  labs(color='Temp(C)')
+  labs(color='Temp(C)') + 
+  theme(legend.position = "bottom")
+
+grid.arrange(aa, bb, ncol=2)
 
 # There is a clear seasonal trend where the total rental bikes seems to decrease during Winters i.e month of January and Feburary of the year and the total rental bikes seems to increase during summers.
 
@@ -97,6 +116,7 @@ cor(train_set[,c('temp','count')])
 ## Box Plot
 train_set$season <- as.factor(train_set$season)
 levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
+
 ggplot(data=train_set,aes(season,count,color = season)) +
   geom_boxplot( alpha = .2) + 
   ggtitle("Rental count by season") + 
@@ -127,12 +147,14 @@ ggplot(filter(train_set,workingday == 1), aes(hour,count)) +
 #   scale_color_gradientn(colours = c('dark blue','blue','light blue','light green','yellow','orange','red')) +
 #   theme_bw()
 
-train_set %>% 
+aa <- train_set %>% 
   filter(workingday == 1) %>%
   ggplot(aes(hour,count)) +
   geom_point( alpha = .5,position = position_jitter(w=1,h=0),aes(color=temp)) +
   scale_color_gradientn(colors = c('blue','green','yellow','red')) +
-  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") + labs(color='Temp(C)') 
+  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") +
+  labs(color='Temp(C)') +  
+  theme(legend.position = "bottom")
 
 # This plot gives an interesting finding regarding temperature and bike rental count. As the temperature increases i.e. gets hotter the count of bike rental increases and for cold temperature there is a decline in count of bike rental.
 
@@ -144,14 +166,17 @@ train_set %>%
 #   theme_bw()
 
 
-train_set %>% 
+bb <- train_set %>% 
   filter(workingday == 0) %>%
   ggplot(aes(hour,count)) +
   geom_point( alpha = .5,position = position_jitter(w=1,h=0),aes(color=temp)) +
   scale_color_gradientn(colors = c('blue','green','yellow','red')) +
-  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") + labs(color='Temp(C)') 
+  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") + 
+  labs(color='Temp(C)') +  
+  theme(legend.position = "bottom")
 
 
+grid.arrange(aa,bb, ncol=2)
 
 ## Model Building
 # This model will be predicting the count of the bike rental based on the temp variable.
@@ -195,9 +220,12 @@ fit_test <- data.frame("Predict"=predict(temp.model,newdata=data.frame(temp=vali
 # windspeed
 # hour (factor)
 
-model <- lm(count ~ . - datetime - atemp, train_set)
-print(summary(model))
+
+# model <- lm(count ~ ., train_set)
+# print(summary(model))
 
 
 ## Important Finding
 # This sort of model doesn’t work well given our seasonal and time series data. We need a model that can account for this type of trend. We will get thrown off with the growth of our dataset accidentaly attributing to the winter season instead of realizing it’s just overall demand growing.
+```
+
