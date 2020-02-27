@@ -75,6 +75,7 @@ levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
 train_set <- train_set %>% 
   mutate(hour = hour(datetime))
 
+train_set_2 <- train_set
 
 valid_set <- train_set %>% 
   filter(group == "valid")
@@ -243,5 +244,28 @@ fit_test <- data.frame("Predict"=predict(temp.model,newdata=data.frame(temp=vali
 
 ## Important Finding
 # This sort of model doesn’t work well given our seasonal and time series data. We need a model that can account for this type of trend. We will get thrown off with the growth of our dataset accidentaly attributing to the winter season instead of realizing it’s just overall demand growing.
+```
+
+```{r}
+temp.model <- lm(count ~ temp, train_set_2)
+print(summary(temp.model))
+
+
+## Model Interpretation
+# ** Based on the value of Intercept which is 6.0462, linear regression model predicts that there will be 6 bike rental when the temperature is 0. ** For temp variable Estimated Std. value is 9.1705 which signigies that a temperature increase of 1 celsius holding all things equal is associated with a rental increase of about 9.1 bikes.
+# ** The above findings is not a Causation and Beta 1 would be negative if an increase in temperature was associated with a decrease in rentals.
+# 
+# Next we want to know is how many bikes would we predict to be rented if the temperature was 25 degrees celsius.
+
+
+## How many rented bikes at temperature 25 degrees celsius
+temp.model$coefficients[1]+ temp.model$coefficients[2] * 25
+
+temp.test <- data.frame(temp=c(25))
+predict(temp.model,temp.test)
+
+
+data.frame("datetime" = test_set$datetime,"count"=predict(temp.model,newdata=data.frame(temp=test_set$temp))) %>% 
+  write.csv("bike_sharing_test.csv", row.names = FALSE)
 ```
 
