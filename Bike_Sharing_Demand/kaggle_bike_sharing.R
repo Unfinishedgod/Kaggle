@@ -5,6 +5,7 @@ library(caret)
 library(readr)
 library(gridExtra)
 library(xgboost)
+library(Metrics)
 
 
 train_set <- read_csv("train.csv")
@@ -60,12 +61,12 @@ test_set <- test_set %>%
 
 
 
-valid_set <- train_set %>% 
-  filter(group == "valid")
-
-
-train_set <- train_set %>% 
-  filter(group == "train")
+# valid_set <- train_set %>% 
+#   filter(group == "valid")
+# 
+# 
+# train_set <- train_set %>% 
+#   filter(group == "train")
 
 
 
@@ -204,6 +205,103 @@ grid.arrange(aa,bb, ncol=2)
 ## Important Finding
 # This sort of model doesn’t work well given our seasonal and time series data. We need a model that can account for this type of trend. We will get thrown off with the growth of our dataset accidentaly attributing to the winter season instead of realizing it’s just overall demand growing.
 
+
+##########################################################################################
+##########################################################################################
+
+train_set <- train_set_2 %>% 
+  filter(group == "train") 
+
+valid_set <- train_set_2 %>% 
+  filter(group == "valid") 
+
+
+train_set$count = log1p(train_set$count)
+
+X_train <- train_set %>%
+  select(-count, - datetime, -group) %>% 
+  as.matrix()
+
+y_train <- train_set$count
+
+
+dtrain = xgb.DMatrix(X_train, label = y_train)
+
+
+# cv <- xgb.cv(data = dtrain, nrounds = 3, nthread = 2, nfold = 5, metrics = list("rmse","auc"),
+#              max_depth = 3, eta = 1, objective = "reg:squarederror")
+# 
+# print(cv)
+# print(cv, verbose=TRUE)
+
+
+model = xgb.train(data = dtrain, 
+                  nround = 150, 
+                  max_depth = 5, 
+                  eta = 0.1, 
+                  subsample = 0.9)
+
+
+## cv grid search
+searchGridSubCol <- expand.grid(subsample = c(0.5, 0.6), 
+                                colsample_bytree = c(0.5, 0.6),
+                                max_depth = c(3, 4, 5),
+                                min_child = seq(1), 
+                                eta = c(0.1)
+)
+
+ntrees <- 100
+
+system.time(
+  rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
+    
+    #Extract Parameters to test
+    currentSubsampleRate <- parameterList[["subsample"]]
+    currentColsampleRate <- parameterList[["colsample_bytree"]]
+    currentDepth <- parameterList[["max_depth"]]
+    currentEta <- parameterList[["eta"]]
+    currentMinChild <- parameterList[["min_child"]]
+    
+    xgboostModelCV <- xgb.cv(data =  dtrain, nrounds = ntrees, nfold = 5, showsd = TRUE, 
+                             metrics = "rmse", verbose = TRUE, "eval_metric" = "rmse",
+                             "objective" = "reg:linear", "max.depth" = currentDepth, "eta" = currentEta,                               
+                             "subsample" = currentSubsampleRate, "colsample_bytree" = currentColsampleRate
+                             , print_every_n = 10, "min_child_weight" = currentMinChild, booster = "gbtree",
+                             early_stopping_rounds = 10)
+    
+    xvalidationScores <- as.data.frame(xgboostModelCV$evaluation_log)
+    rmse <- tail(xvalidationScores$test_rmse_mean, 1)
+    trmse <- tail(xvalidationScores$train_rmse_mean,1)
+    output <- return(c(rmse, trmse, currentSubsampleRate, currentColsampleRate, currentDepth, currentEta, currentMinChild))}))
+
+
+output <- as.data.frame(t(rmseErrorsHyperparameters))
+varnames <- c("TestRMSE", "TrainRMSE", "SubSampRate", "ColSampRate", "Depth", "eta", "currentMinChild")
+names(output) <- varnames
+head(output)
+
+# xgb.importance(feature_names = colnames(X_train), model) %>% 
+#   xgb.plot.importance()
+
+
+
+X_valid = valid_set %>% 
+  select(- datetime, -group, -count) %>% 
+  as.matrix()
+
+y_valid = valid_set$count
+
+preds = predict(model, y_valid)
+preds = expm1(preds)
+
+solution = data.frame(datetime = valid_set$datetime, count = preds)
+
+rmsle(y_valid, preds)
+
+# write.csv(solution, "solution.csv", row.names = FALSE)
+##########################################################################################
+##########################################################################################
+
 train_set_2$count = log1p(train_set_2$count)
 
 X_train <- train_set_2 %>%
@@ -216,12 +314,72 @@ y_train <- train_set_2$count
 dtrain = xgb.DMatrix(X_train, label = y_train)
 
 
-cv <- xgb.cv(data = dtrain, nrounds = 3, nthread = 2, nfold = 5, metrics = list("rmse","auc"),
-             max_depth = 3, eta = 1, objective = "reg:squarederror")
+# cv <- xgb.cv(data = dtrain, nrounds = 3, nthread = 2, nfold = 5, metrics = list("rmse","auc"),
+#              max_depth = 3, eta = 1, objective = "reg:squarederror")
 
-print(cv)
-print(cv, verbose=TRUE)
+# print(cv)
+# print(cv, verbose=TRUE)
 
+
+
+
+#####
+#####
+## cv grid search
+searchGridSubCol <- expand.grid(subsample = c(0.5, 0.6), 
+                                colsample_bytree = c(0.5, 0.6),
+                                max_depth = c(3, 4, 5),
+                                min_child = seq(1), 
+                                eta = c(0.1)
+)
+
+# xgboostModelCV <- xgb.cv(data =  dtrain, nrounds = ntrees, nfold = 5, showsd = TRUE, 
+#                          metrics = "rmse", verbose = TRUE, "eval_metric" = "rmse",
+#                          "objective" = "reg:linear", 
+#                          "max.depth" = 3, 
+#                          "eta" = 0.1,                            
+#                          "subsample" = 0.7, 
+#                          "colsample_bytree" = 0.5, 
+#                          print_every_n = 10,
+#                          "min_child_weight" = 1,
+#                          booster = "gbtree",
+#                          early_stopping_rounds = 10)
+
+
+ntrees <- 100
+
+system.time(
+  rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
+    
+    #Extract Parameters to test
+    currentSubsampleRate <- parameterList[["subsample"]]
+    currentColsampleRate <- parameterList[["colsample_bytree"]]
+    currentDepth <- parameterList[["max_depth"]]
+    currentEta <- parameterList[["eta"]]
+    currentMinChild <- parameterList[["min_child"]]
+    
+    xgboostModelCV <- xgb.cv(data =  dtrain, nrounds = ntrees, nfold = 5, showsd = TRUE, 
+                             metrics = "rmse", verbose = TRUE, "eval_metric" = "rmse",
+                             "objective" = "reg:linear", "max.depth" = currentDepth, "eta" = currentEta,                            
+                             "subsample" = currentSubsampleRate, "colsample_bytree" = currentColsampleRate
+                             , print_every_n = 10, "min_child_weight" = currentMinChild, booster = "gbtree",
+                             early_stopping_rounds = 10)
+    
+    xvalidationScores <- as.data.frame(xgboostModelCV$evaluation_log)
+    rmse <- tail(xvalidationScores$test_rmse_mean, 1)
+    trmse <- tail(xvalidationScores$train_rmse_mean,1)
+    output <- return(c(rmse, trmse,currentSubsampleRate, currentColsampleRate, currentDepth, currentEta, currentMinChild))})
+  )
+
+
+output <- as.data.frame(t(rmseErrorsHyperparameters))
+varnames <- c("TestRMSE", "TrainRMSE", "SubSampRate", "ColSampRate", "Depth", "eta", "currentMinChild")
+names(output) <- varnames
+head(output)
+
+
+#####
+#####
 
 model = xgb.train(data = dtrain, 
                   nround = 150, 
