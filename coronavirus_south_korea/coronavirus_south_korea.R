@@ -1,7 +1,5 @@
 library(tidyverse)
 
-
-
 patient_set$infection_reason
 
 patient_set %>% 
