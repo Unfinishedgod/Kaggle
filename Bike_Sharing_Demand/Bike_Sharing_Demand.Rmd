@@ -144,6 +144,7 @@ ggplot(data=train_set,aes(season,count,color = season)) +
   xlab("Season") +
   ylab("Rental Count") +
   labs(color='Season', labels=c("Spring","Summer","Fall","Winter")) +
+  # theme(legend.position = "bottom") +
   theme_bw()
 
 # The box plot between the number of bike rentals and season shows that the line can not capture the non linear relationship and that there’s is more rentals in winter as compared to spring.
@@ -169,7 +170,7 @@ aa <- train_set %>%
   ggplot(aes(hour,count)) +
   geom_point( alpha = .5,position = position_jitter(w=1,h=0),aes(color=temp)) +
   scale_color_gradientn(colors = c('blue','green','yellow','red')) +
-  ggtitle("Weekday Rental Count") + xlab("Hour") + ylab("Rental Count") +
+  ggtitle("Workingday Rental Count") + xlab("Hour") + ylab("Rental Count") +
   labs(color='Temp(C)') +  
   theme(legend.position = "bottom")
 
@@ -262,13 +263,13 @@ xgb.importance(feature_names = colnames(X_train), model) %>%
 ```
 
 ```{r}
-X_test = test_set %>% select(- datetime) %>% as.matrix()
-y_test = test_set$count
-
-preds = predict(model, X_test)
-preds = expm1(preds)
-solution = data.frame(datetime = test$datetime, count = preds)
-write.csv(solution, "solution.csv", row.names = FALSE)
+# X_test = test_set %>% select(- datetime) %>% as.matrix()
+# y_test = test_set$count
+# 
+# preds = predict(model, X_test)
+# preds = expm1(preds)
+# solution = data.frame(datetime = test$datetime, count = preds)
+# write.csv(solution, "solution.csv", row.names = FALSE)
 ```
 
 

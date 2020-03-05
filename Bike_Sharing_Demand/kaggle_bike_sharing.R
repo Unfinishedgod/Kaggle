@@ -6,7 +6,6 @@ library(readr)
 library(gridExtra)
 library(xgboost)
 
-
 train_set <- read_csv("train.csv")
 test_set <- read_csv("test.csv")
 submission <- read_csv("sampleSubmission.csv")
