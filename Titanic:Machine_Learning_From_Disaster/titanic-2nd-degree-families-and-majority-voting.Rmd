@@ -861,14 +861,14 @@ solution_svm <- predict(caret_svm, testClean)
 As I am already having a model that uses Bagging, I want the 3rd model to be a boosting model. Of the possible boosting algorithms, I am choosing GBM.
 
 ```{r}
-set.seed(2017)
-caret_boost <- train(Survived~ PclassSex + GroupSize + FareBins + AnySurvivors + IsChildP12, data=trainClean, method='gbm', preProcess= c('center', 'scale'), trControl=trainControl(method="cv", number=7), verbose=FALSE)
+# set.seed(2017)
+# caret_boost <- train(Survived~ PclassSex + GroupSize + FareBins + AnySurvivors + IsChildP12, data=trainClean, method='gbm', preProcess= c('center', 'scale'), trControl=trainControl(method="cv", number=7), verbose=FALSE)
 # print(caret_boost)
 ```
 
 ```{r}
-#using the model to make Survival predictions on the test set
-solution_boost <- predict(caret_boost, testClean)
+# #using the model to make Survival predictions on the test set
+# solution_boost <- predict(caret_boost, testClean)
 ```
 
 ##Combining models
@@ -878,13 +878,13 @@ solution_boost <- predict(caret_boost, testClean)
 A simple majority vote a multiple good models can help to increase accuracy. This idea is really well explained in [Kaggle Ensembling Guide](https://mlwave.com/kaggle-ensembling-guide/). It works best with multiple good models that are as uncorrelated as possible.
 
 ```{r}
-#adding model predictions to test dataframe
-testClean$RF <- as.numeric(solution_rf)-1
-testClean$SVM <- as.numeric(solution_svm)-1
-testClean$Boost <- as.numeric(solution_boost)-1
-
-#compose correlations plot
-corrplot.mixed(cor(testClean[, c('RF', 'SVM', 'Boost')]), order="hclust", tl.col="black")
+# #adding model predictions to test dataframe
+# testClean$RF <- as.numeric(solution_rf)-1
+# testClean$SVM <- as.numeric(solution_svm)-1
+# testClean$Boost <- as.numeric(solution_boost)-1
+# 
+# #compose correlations plot
+# corrplot.mixed(cor(testClean[, c('RF', 'SVM', 'Boost')]), order="hclust", tl.col="black")
 ```
 
 Given the fact that all three models have decent public scores, especially the correlation between SVM and the GBM model is surprisingly low. The most likely explanation is that SVM really is a different algorithm (both other models are tree-based).
@@ -896,8 +896,8 @@ The idea is very simple:
 
 ```{r}
 
-testClean$Sum <- testClean$RF + testClean$SVM + testClean$Boost
-testClean$Majority <- ifelse(testClean$Sum<=1, 0, 1)
+# testClean$Sum <- testClean$RF + testClean$SVM + testClean$Boost
+# testClean$Majority <- ifelse(testClean$Sum<=1, 0, 1)
 ```
 
 ###Taking predictions from one model, unless the others both disagree
@@ -907,36 +907,36 @@ Although I have done my best to avoid over fitting as much as possible (by for i
 The best kernels on Kaggle show that a public score of around 0.82 - 0.83 is likely to be the maximum achievable test accuracy. The cross validation score of the SVM model is exactely in this range. Probably even more importantly, a low AccuracySD seems more important than the Accuracy itself regarding Public Scores. As the SVM also has a really low AccuracySD, I am going to use SVM as my best model. In this second framework, I am taking the SVM predictions unless both RF and GBM disagree with the SVM prediction.
 
 ```{r}
-testClean$DisagreeSVM <- ifelse(testClean$RF==testClean$Boost & testClean$SVM != testClean$RF, testClean$RF, testClean$SVM)
+# testClean$DisagreeSVM <- ifelse(testClean$RF==testClean$Boost & testClean$SVM != testClean$RF, testClean$RF, testClean$SVM)
 ```
 
 ###Selectively combining models for PclassSex combinations
 Another idea is to select the model that seems best for each PclassSex combination. When looking at predictions on the training set, issues seem similar in all models. All produce tend to produce False Negatives for men (men predicted to die, but survived), and False Positives for women (predicted to survive, but died). 
 
 ```{r}
-#predictions of the models on the training set
-trainClean$RF <- predict(caret_matrix, trainClean)
-trainClean$SVM <- predict(caret_svm, trainClean)
-trainClean$Boost <- predict(caret_boost, trainClean)
-
-
-#plot differences between actual survived and predictions
-f1 <- ggplot(trainClean[trainClean$Survived != trainClean$RF,], aes(x=PclassSex, fill=RF)) +
-        geom_bar(stat='count') + labs(title="FP and FN, RF model") + theme_grey() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        theme(legend.position="none") + xlab("")
-
-f2 <- ggplot(trainClean[trainClean$Survived != trainClean$SVM,], aes(x=PclassSex, fill=SVM)) +
-        geom_bar(stat='count')+ labs(title="FP and FN, SVM") + theme_grey() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        theme(legend.position="none") + xlab("")
-
-f3 <- ggplot(trainClean[trainClean$Survived != trainClean$Boost,], aes(x=PclassSex, fill=Boost)) +
-        geom_bar(stat='count')+ labs(title="FP and FN, GBM") + theme_grey() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        theme(legend.position="none") + xlab("")
-
-grid.arrange(f1, f2, f3, nrow = 1)
+# #predictions of the models on the training set
+# trainClean$RF <- predict(caret_matrix, trainClean)
+# trainClean$SVM <- predict(caret_svm, trainClean)
+# trainClean$Boost <- predict(caret_boost, trainClean)
+# 
+# 
+# #plot differences between actual survived and predictions
+# f1 <- ggplot(trainClean[trainClean$Survived != trainClean$RF,], aes(x=PclassSex, fill=RF)) +
+#         geom_bar(stat='count') + labs(title="FP and FN, RF model") + theme_grey() +
+#         theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#         theme(legend.position="none") + xlab("")
+# 
+# f2 <- ggplot(trainClean[trainClean$Survived != trainClean$SVM,], aes(x=PclassSex, fill=SVM)) +
+#         geom_bar(stat='count')+ labs(title="FP and FN, SVM") + theme_grey() +
+#         theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#         theme(legend.position="none") + xlab("")
+# 
+# f3 <- ggplot(trainClean[trainClean$Survived != trainClean$Boost,], aes(x=PclassSex, fill=Boost)) +
+#         geom_bar(stat='count')+ labs(title="FP and FN, GBM") + theme_grey() +
+#         theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#         theme(legend.position="none") + xlab("")
+# 
+# grid.arrange(f1, f2, f3, nrow = 1)
 ```
 
 A noticable difference however is that the SVM model also produced a significant amount of False Positives in P3Male (the blue part). As the survival rate of men in P3 was really low, this large amount of False Positives seems a bad sign.
@@ -944,16 +944,16 @@ A noticable difference however is that the SVM model also produced a significant
 What I now could do is take SVM as the base model, but take GBM for the P3 predictions.
 
 ```{r}
-#selecting SVM prediction, and GMB predictions for P3
-testClean$Select <- ifelse(testClean$Pclass != 3, testClean$SVM, testClean$Boost)
+# #selecting SVM prediction, and GMB predictions for P3
+# testClean$Select <- ifelse(testClean$Pclass != 3, testClean$SVM, testClean$Boost)
 ```
 
 The best framework turned out to be the combination of SVM for P1 and P2, and GBM for P3. The majority voting and 'take SVM unless both RF and GBM disagree' did not improve my score. However, chances are that these methods will also improve the scores if I add a few more good models. This should decrease of 2 (alternative) models both getting a prediction wrong.
 
 ```{r}
-#writing final submission file
-submission_select <- data.frame(PassengerId = test$PassengerId, Survived = testClean$Select)
-write.csv(submission_select, file = 'Titanic_select.csv', row.names = F)
+# #writing final submission file
+# submission_select <- data.frame(PassengerId = test$PassengerId, Survived = testClean$Select)
+# write.csv(submission_select, file = 'Titanic_select.csv', row.names = F)
 ```
 
 ##Where is room for improvement?
@@ -962,10 +962,10 @@ write.csv(submission_select, file = 'Titanic_select.csv', row.names = F)
 This class is hard to predict, as 37% of men in P1 survived while men overall have a much lower survival rate. As shown in the previous section, predictions include many False Negatives. Many False Negatives means that the predicted number of survivors on the test set is likely to be too low. As you can see below, all models predict the survival rate of this group to be significantly lower than 37% indeed (.37*57=21 survivors).
 
 ```{r}
-cat('Total number of Male passengers in P1 in the test set is', length(testClean$Survived[testClean$PclassSex=='P1Male']))
-
-p1m_surv <- as.data.frame(sapply(testClean[testClean$PclassSex=='P1Male', c('RF', 'SVM', 'Boost')], function(x) {sum(x)}))
-kable(x=p1m_surv, col.names = c('Predicted number of survivors'))
+# cat('Total number of Male passengers in P1 in the test set is', length(testClean$Survived[testClean$PclassSex=='P1Male']))
+# 
+# p1m_surv <- as.data.frame(sapply(testClean[testClean$PclassSex=='P1Male', c('RF', 'SVM', 'Boost')], function(x) {sum(x)}))
+# kable(x=p1m_surv, col.names = c('Predicted number of survivors'))
 ```
 
 ----
@@ -977,16 +977,16 @@ I do not know if the survival rate of P1Male in the test set is also 37%, but it
 I have actually tried to include this exception in the models, but It did not improve the scores. I assume this is because the survival rate in P1Male under 40 now really gets close to 50/50, which makes it very hard to predict with some degree of certainty.
 
 ```{r}
-p1m1 <- ggplot(all[indexAgeSurvivedNotNA,] %>% filter(PclassSex=='P1Male'), aes(x = Age, fill = Survived)) + geom_density(alpha=0.5, aes(fill=factor(Survived))) + labs(title="Survival density and Age P1 Male") + theme_grey()
-
-all$P1AgeMale[indexAgeSurvivedNotNA=T & all$PclassSex=='P1Male' & all$Age<40] <- 'Under40'
-all$P1AgeMale[indexAgeSurvivedNotNA=T & all$PclassSex=='P1Male' & all$Age>=40] <- 'Over40'
-
-p1m2 <- ggplot(all[!is.na(all$Survived) & !is.na(all$P1AgeMale),], aes(x=P1AgeMale, fill=Survived))+
-        geom_bar(stat = 'count', position = 'fill') + theme(legend.position="none")
-
-
-grid.arrange(p1m1, p1m2, widths=c(2,1))
+# p1m1 <- ggplot(all[indexAgeSurvivedNotNA,] %>% filter(PclassSex=='P1Male'), aes(x = Age, fill = Survived)) + geom_density(alpha=0.5, aes(fill=factor(Survived))) + labs(title="Survival density and Age P1 Male") + theme_grey()
+# 
+# all$P1AgeMale[indexAgeSurvivedNotNA=T & all$PclassSex=='P1Male' & all$Age<40] <- 'Under40'
+# all$P1AgeMale[indexAgeSurvivedNotNA=T & all$PclassSex=='P1Male' & all$Age>=40] <- 'Over40'
+# 
+# p1m2 <- ggplot(all[!is.na(all$Survived) & !is.na(all$P1AgeMale),], aes(x=P1AgeMale, fill=Survived))+
+#         geom_bar(stat = 'count', position = 'fill') + theme(legend.position="none")
+# 
+# 
+# grid.arrange(p1m1, p1m2, widths=c(2,1))
 ```
 
 ###How to fix Female in 3rd class issues?
@@ -995,8 +995,8 @@ Females in 3rd class have an overall 50/50 survival chance, which is hard to pre
 As you can see below, solo women (based on SibSp) had better chances of survival in all Pclasses. This is especially relevant to the women in P3, as differences in P2Female and P1Female are small while they mostly survived anyway. In previous versions, I tried a different IsSolo predictor (based on Fsize), and did not manage to model this exception succesfully. However, it may be worth trying a Male/Female split with the IsSolo predictor based on SibSp only.
 
 ```{r}
-ggplot(all[!is.na(all$Survived),], aes(x=IsSolo, fill=Survived))+
-        geom_bar(stat='count', position='fill') + facet_grid(.~Pclass+Sex)
+# ggplot(all[!is.na(all$Survived),], aes(x=IsSolo, fill=Survived))+
+#         geom_bar(stat='count', position='fill') + facet_grid(.~Pclass+Sex)
 ```
 
 
