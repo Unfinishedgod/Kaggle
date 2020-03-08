@@ -6,12 +6,14 @@ library(readr)
 library(gridExtra)
 library(xgboost)
 library(Metrics)
+library(plyr)
 
+train_set <- read_csv("Bike_Sharing_Demand/train.csv")
+test_set <- read_csv("Bike_Sharing_Demand/test.csv")
+submission <- read_csv("Bike_Sharing_Demand/sampleSubmission.csv")
 
-train_set <- read_csv("train.csv")
-test_set <- read_csv("test.csv")
-submission <- read_csv("sampleSubmission.csv")
-
+str(train_set)
+summary(train_set)
 
 # Data Fields
 # datetime - hourly date + timestamp  
@@ -39,13 +41,47 @@ train_set <- train_set %>%
     year = year(datetime),
     month = month(datetime),
     hour = hour(datetime),
-    minute = minute(datetime)) %>% 
-  mutate(group = sample(
-    c("train", "valid"),
-    size = nrow(train_set),
-    replace = TRUE,
-    prob = c(0.7, 0.3) # Set weights for each group here
-  ))
+    wday = wday(datetime, label=TRUE))
+
+
+train <- train_set
+
+train$season  <- factor(train$season, labels = c("Spring", "Summer", "Fall", "Winter"))
+train$weather <- factor(train$weather, labels = c("Good", "Normal", "Bad", "Very Bad"))
+train$hour    <- factor(hour(ymd_hms(train$datetime)))
+train$times   <- as.POSIXct(strftime(ymd_hms(train$datetime), format="%H:%M:%S"), format="%H:%M:%S")
+train$Weekday <- wday(ymd_hms(train$datetime), label=TRUE)
+
+season_summary <- ddply(train,.(season,hour),
+                        summarise, count = mean(count))
+str(train)
+
+################################################################################
+################################################################################
+train %>% 
+  group_by(season, hour) %>% 
+  dplyr::summarise(count = sum(count)) %>% 
+  ggplot(aes(x=hour, y=count, group = season, colour=season)) + 
+  labs(x = "Hour", y = "Count") +
+  theme_bw() +
+  geom_line(size=1) + 
+  geom_point(size=2)
+################################################################################
+################################################################################
+
+ggplot(train, aes(x = hour, y = count, colour = season)) +
+  geom_point(data = season_summary, aes(group = season)) +
+  geom_line(data = season_summary, aes(group = season)) +
+  scale_x_discrete("Hour") +
+  scale_y_continuous("Count") +
+  theme_minimal() +
+  ggtitle("People rent bikes more in Fall, and much less in Spring.\n") + 
+  theme(plot.title=element_text(size=18))
+
+weather_summary <- ddply(train,.(weather,hour),
+                         summarise, count = mean(count))
+
+
 
 train_set_2 <- train_set
 
@@ -56,8 +92,7 @@ test_set <- test_set %>%
   mutate(
     year = year(datetime),
     month = month(datetime),
-    hour = hour(datetime),
-    minute = minute(datetime))
+    hour = hour(datetime))
 
 
 
@@ -69,21 +104,50 @@ test_set <- test_set %>%
 #   filter(group == "train")
 
 
-
-dim(train_set)
-dim(valid_set)
-
-str(train_set)
-str(valid_set)
-
-colnames(train_set)
-colnames(valid_set)
-
-head(train_set)
-head(valid_set)
-
 # Data Visualization
 # The count vs temperature plot shows that rental count increases as the temperature increases.
+
+train_set %>% head(1)
+
+ggplot(data = train_set, aes(temp,count)) +
+  geom_col(alpha=.2,aes(color=temp)) +
+  scale_colour_continuous(low = "yellow", high = 'red') +
+  labs(title = "시도별 코로나 확진자", x = "지역(시도)", y = "", fill = "확진자") +
+  theme_bw() +  
+  theme(legend.position = "bottom")
+
+
+b <- list()
+for(i in 1:14) {
+  df_list <- colnames(train_set)[i]
+  
+  b[[i]] <- train_set %>% 
+    select(df_list, count) %>% 
+    rename(aa = df_list) %>% 
+    ggplot(aes(aa,count)) +
+    geom_col(alpha=.2,aes(color = aa)) +
+    labs(title = "시도별 코로나 확진자", x = df_list, y = "",color=df_list) +
+    theme_bw() +  
+    theme(legend.position = "bottom")
+}
+
+
+grid.arrange(b[[1]],b[[2]],b[[3]],b[[4]],b[[5]],
+             b[[6]],b[[7]],b[[8]],b[[9]],b[[11]],
+             b[[12]],b[[13]],b[[14]],
+             ncol=4)
+
+train_set %>% 
+  group_by(wday, hour) %>% 
+  summarise(day_summary = mean(count)) %>% 
+  ggplot(aes(x = hour, y = count, colour = wday)) +
+  # geom_point(aes(group=wday)) +
+  geom_line() +
+  scale_x_discrete("Hour") +
+  scale_y_continuous("Count") +
+  theme_minimal() +
+  ggtitle("People rent bikes for morning/evening commutes on weekdays,
+  and daytime rides on weekends\n")
 
 
 # Temperature v Count plot
@@ -91,7 +155,8 @@ head(valid_set)
 aa <- ggplot(data = train_set, aes(temp,count)) +
   geom_point(alpha=.2,aes(color=temp)) +
   ggtitle("Count vs Temperature") + xlab("Temp (Celsius)") +
-  ylab("Rental Count") + labs(color='Temp(C)') +
+  ylab("Rental Count") +
+  labs(color='Temp(C)') +
   theme_bw() +  
   theme(legend.position = "bottom")
 
@@ -209,94 +274,94 @@ grid.arrange(aa,bb, ncol=2)
 ##########################################################################################
 ##########################################################################################
 
-train_set <- train_set_2 %>% 
-  filter(group == "train") 
-
-valid_set <- train_set_2 %>% 
-  filter(group == "valid") 
-
-
-train_set$count = log1p(train_set$count)
-
-X_train <- train_set %>%
-  select(-count, - datetime, -group) %>% 
-  as.matrix()
-
-y_train <- train_set$count
-
-
-dtrain = xgb.DMatrix(X_train, label = y_train)
-
-
-# cv <- xgb.cv(data = dtrain, nrounds = 3, nthread = 2, nfold = 5, metrics = list("rmse","auc"),
-#              max_depth = 3, eta = 1, objective = "reg:squarederror")
+# train_set <- train_set_2 %>% 
+#   filter(group == "train") 
 # 
-# print(cv)
-# print(cv, verbose=TRUE)
-
-
-model = xgb.train(data = dtrain, 
-                  nround = 150, 
-                  max_depth = 5, 
-                  eta = 0.1, 
-                  subsample = 0.9)
-
-
-## cv grid search
-searchGridSubCol <- expand.grid(subsample = c(0.5, 0.6), 
-                                colsample_bytree = c(0.5, 0.6),
-                                max_depth = c(3, 4, 5),
-                                min_child = seq(1), 
-                                eta = c(0.1)
-)
-
-ntrees <- 100
-
-system.time(
-  rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
-    
-    #Extract Parameters to test
-    currentSubsampleRate <- parameterList[["subsample"]]
-    currentColsampleRate <- parameterList[["colsample_bytree"]]
-    currentDepth <- parameterList[["max_depth"]]
-    currentEta <- parameterList[["eta"]]
-    currentMinChild <- parameterList[["min_child"]]
-    
-    xgboostModelCV <- xgb.cv(data =  dtrain, nrounds = ntrees, nfold = 5, showsd = TRUE, 
-                             metrics = "rmse", verbose = TRUE, "eval_metric" = "rmse",
-                             "objective" = "reg:linear", "max.depth" = currentDepth, "eta" = currentEta,                               
-                             "subsample" = currentSubsampleRate, "colsample_bytree" = currentColsampleRate
-                             , print_every_n = 10, "min_child_weight" = currentMinChild, booster = "gbtree",
-                             early_stopping_rounds = 10)
-    
-    xvalidationScores <- as.data.frame(xgboostModelCV$evaluation_log)
-    rmse <- tail(xvalidationScores$test_rmse_mean, 1)
-    trmse <- tail(xvalidationScores$train_rmse_mean,1)
-    output <- return(c(rmse, trmse, currentSubsampleRate, currentColsampleRate, currentDepth, currentEta, currentMinChild))}))
-
-
-output <- as.data.frame(t(rmseErrorsHyperparameters))
-varnames <- c("TestRMSE", "TrainRMSE", "SubSampRate", "ColSampRate", "Depth", "eta", "currentMinChild")
-names(output) <- varnames
-head(output)
-
-# xgb.importance(feature_names = colnames(X_train), model) %>% 
-#   xgb.plot.importance()
-
-
-
-X_valid = valid_set %>% 
-  select(- datetime, -group, -count) %>% 
-  as.matrix()
-
-y_valid = valid_set$count
-
-preds = predict(model, y_valid)
-preds = expm1(preds)
-
-solution = data.frame(datetime = valid_set$datetime, count = preds)
-
-rmsle(y_valid, preds)
+# valid_set <- train_set_2 %>% 
+#   filter(group == "valid") 
+# 
+# 
+# train_set$count = log1p(train_set$count)
+# 
+# X_train <- train_set %>%
+#   select(-count, - datetime, -group) %>% 
+#   as.matrix()
+# 
+# y_train <- train_set$count
+# 
+# 
+# dtrain = xgb.DMatrix(X_train, label = y_train)
+# 
+# 
+# # cv <- xgb.cv(data = dtrain, nrounds = 3, nthread = 2, nfold = 5, metrics = list("rmse","auc"),
+# #              max_depth = 3, eta = 1, objective = "reg:squarederror")
+# # 
+# # print(cv)
+# # print(cv, verbose=TRUE)
+# 
+# 
+# model = xgb.train(data = dtrain, 
+#                   nround = 150, 
+#                   max_depth = 5, 
+#                   eta = 0.1, 
+#                   subsample = 0.9)
+# 
+# 
+# ## cv grid search
+# searchGridSubCol <- expand.grid(subsample = c(0.5, 0.6), 
+#                                 colsample_bytree = c(0.5, 0.6),
+#                                 max_depth = c(3, 4, 5),
+#                                 min_child = seq(1), 
+#                                 eta = c(0.1)
+# )
+# 
+# ntrees <- 100
+# 
+# system.time(
+#   rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
+#     
+#     #Extract Parameters to test
+#     currentSubsampleRate <- parameterList[["subsample"]]
+#     currentColsampleRate <- parameterList[["colsample_bytree"]]
+#     currentDepth <- parameterList[["max_depth"]]
+#     currentEta <- parameterList[["eta"]]
+#     currentMinChild <- parameterList[["min_child"]]
+#     
+#     xgboostModelCV <- xgb.cv(data =  dtrain, nrounds = ntrees, nfold = 5, showsd = TRUE, 
+#                              metrics = "rmse", verbose = TRUE, "eval_metric" = "rmse",
+#                              "objective" = "reg:linear", "max.depth" = currentDepth, "eta" = currentEta,                               
+#                              "subsample" = currentSubsampleRate, "colsample_bytree" = currentColsampleRate
+#                              , print_every_n = 10, "min_child_weight" = currentMinChild, booster = "gbtree",
+#                              early_stopping_rounds = 10)
+#     
+#     xvalidationScores <- as.data.frame(xgboostModelCV$evaluation_log)
+#     rmse <- tail(xvalidationScores$test_rmse_mean, 1)
+#     trmse <- tail(xvalidationScores$train_rmse_mean,1)
+#     output <- return(c(rmse, trmse, currentSubsampleRate, currentColsampleRate, currentDepth, currentEta, currentMinChild))}))
+# 
+# 
+# output <- as.data.frame(t(rmseErrorsHyperparameters))
+# varnames <- c("TestRMSE", "TrainRMSE", "SubSampRate", "ColSampRate", "Depth", "eta", "currentMinChild")
+# names(output) <- varnames
+# head(output)
+# 
+# # xgb.importance(feature_names = colnames(X_train), model) %>% 
+# #   xgb.plot.importance()
+# 
+# 
+# 
+# X_valid = valid_set %>% 
+#   select(- datetime, -group, -count) %>% 
+#   as.matrix()
+# 
+# y_valid = valid_set$count
+# 
+# preds = predict(model, y_valid)
+# preds = expm1(preds)
+# 
+# solution = data.frame(datetime = valid_set$datetime, count = preds)
+# 
+# rmsle(y_valid, preds)
 
 # write.csv(solution, "solution.csv", row.names = FALSE)
 ##########################################################################################
@@ -305,7 +370,7 @@ rmsle(y_valid, preds)
 train_set_2$count = log1p(train_set_2$count)
 
 X_train <- train_set_2 %>%
-  select(-count, - datetime, -group) %>% 
+  select(-count, - datetime) %>% 
   as.matrix()
 
 y_train <- train_set_2$count
