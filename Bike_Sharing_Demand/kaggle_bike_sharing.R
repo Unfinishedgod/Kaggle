@@ -120,31 +120,6 @@ grid.arrange(b[[2]],b[[3]],b[[4]],
 
 
 
-
-train_set %>% head(1)
-
-ggplot(data = train_set, aes(temp,count)) +
-  geom_col(alpha=.2,aes(color=temp)) +
-  scale_colour_continuous(low = "yellow", high = 'red') +
-  labs(title = "시도별 코로나 확진자", x = "지역(시도)", y = "", fill = "확진자") +
-  theme_bw() +  
-  theme(legend.position = "bottom")
-
-
-
-train_set %>% 
-  group_by(wday, hour) %>% 
-  summarise(day_summary = mean(count)) %>% 
-  ggplot(aes(x = hour, y = count, colour = wday)) +
-  # geom_point(aes(group=wday)) +
-  geom_line() +
-  scale_x_discrete("Hour") +
-  scale_y_continuous("Count") +
-  theme_minimal() +
-  ggtitle("People rent bikes for morning/evening commutes on weekdays,
-  and daytime rides on weekends\n")
-
-
 # Temperature v Count plot
 # Scatter Plot to show the relationship between count (number of total rentals) and temp (temperature in Celsius)
 aa <- ggplot(data = train_set, aes(temp,count)) +
