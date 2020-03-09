@@ -69,6 +69,8 @@ train %>%
 ################################################################################
 ################################################################################
 
+print("a")
+
 ggplot(train, aes(x = hour, y = count, colour = season)) +
   geom_point(data = season_summary, aes(group = season)) +
   geom_line(data = season_summary, aes(group = season)) +
