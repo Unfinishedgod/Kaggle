@@ -6,14 +6,8 @@ library(readr)
 library(gridExtra)
 library(xgboost)
 library(Metrics)
-library(plyr)
+library(ggplot2)
 
-train_set <- read_csv("Bike_Sharing_Demand/train.csv")
-test_set <- read_csv("Bike_Sharing_Demand/test.csv")
-submission <- read_csv("Bike_Sharing_Demand/sampleSubmission.csv")
-
-str(train_set)
-summary(train_set)
 
 # Data Fields
 # datetime - hourly date + timestamp  
@@ -33,6 +27,9 @@ summary(train_set)
 # count - number of total rentals
 
 
+train_set <- read_csv("Bike_Sharing_Demand/train.csv")
+test_set <- read_csv("Bike_Sharing_Demand/test.csv")
+submission <- read_csv("Bike_Sharing_Demand/sampleSubmission.csv")
 
 # remove casual registered
 train_set <- train_set %>% 
@@ -41,73 +38,88 @@ train_set <- train_set %>%
     year = year(datetime),
     month = month(datetime),
     hour = hour(datetime),
-    wday = wday(datetime, label=TRUE))
+    wday = wday(datetime))
 
-
-train <- train_set
-
-train$season  <- factor(train$season, labels = c("Spring", "Summer", "Fall", "Winter"))
-train$weather <- factor(train$weather, labels = c("Good", "Normal", "Bad", "Very Bad"))
-train$hour    <- factor(hour(ymd_hms(train$datetime)))
-train$times   <- as.POSIXct(strftime(ymd_hms(train$datetime), format="%H:%M:%S"), format="%H:%M:%S")
-train$Weekday <- wday(ymd_hms(train$datetime), label=TRUE)
-
-season_summary <- ddply(train,.(season,hour),
-                        summarise, count = mean(count))
-str(train)
-
-################################################################################
-################################################################################
-train %>% 
-  group_by(season, hour) %>% 
-  dplyr::summarise(count = sum(count)) %>% 
-  ggplot(aes(x=hour, y=count, group = season, colour=season)) + 
-  labs(x = "Hour", y = "Count") +
-  theme_bw() +
-  geom_line(size=1) + 
-  geom_point(size=2)
-################################################################################
-################################################################################
-
-print("ab")
-
-ggplot(train, aes(x = hour, y = count, colour = season)) +
-  geom_point(data = season_summary, aes(group = season)) +
-  geom_line(data = season_summary, aes(group = season)) +
-  scale_x_discrete("Hour") +
-  scale_y_continuous("Count") +
-  theme_minimal() +
-  ggtitle("People rent bikes more in Fall, and much less in Spring.\n") + 
-  theme(plot.title=element_text(size=18))
-
-weather_summary <- ddply(train,.(weather,hour),
-                         summarise, count = mean(count))
-
-
-
-train_set_2 <- train_set
-
-train_set$season <- as.factor(train_set$season)
-levels(train_set$season) <- c('Spring','Summer','Fall','Winter')
 
 test_set <- test_set %>% 
   mutate(
     year = year(datetime),
     month = month(datetime),
-    hour = hour(datetime))
+    hour = hour(datetime),
+    wday = wday(datetime, label=TRUE))
 
 
-
-# valid_set <- train_set %>% 
-#   filter(group == "valid")
-# 
-# 
-# train_set <- train_set %>% 
-#   filter(group == "train")
+str(train_set)
+summary(train_set)
 
 
 # Data Visualization
 # The count vs temperature plot shows that rental count increases as the temperature increases.
+train_set_vis <- train_set
+
+train_set_vis$season  <- factor(train_set_vis$season, labels = c("Spring", "Summer", "Fall", "Winter"))
+train_set_vis$weather <- factor(train_set_vis$weather, labels = c("Good", "Normal", "Bad", "Very Bad"))
+train_set_vis$holiday <- factor(train_set_vis$holiday)
+train_set_vis$workingday <- factor(train_set_vis$workingday)
+train_set_vis$year <- factor(train_set_vis$year)
+train_set_vis$month <- factor(train_set_vis$month)
+# train_set_vis$hour <- factor(train_set_vis$hour)
+train_set_vis$wday <- factor(train_set_vis$wday, labels = c("Sun","Mon", "Tue","Wed","Thu","Fir","Sat"))
+
+
+b <- list()
+for(i in 1:14) {
+  df_list <- colnames(train_set_vis)[i]
+  
+  b[[i]] <- train_set_vis %>% 
+    select(df_list, count) %>% 
+    rename(aa = df_list) %>% 
+    ggplot(aes(aa,count)) +
+    geom_point(alpha=.2,color = "#008ABC") +
+    labs(title = paste0(df_list," vs count"), x = df_list, y = "",color=df_list) +
+    theme_bw() +  
+    theme(legend.position = "bottom")
+}
+
+grid.arrange(b[[1]],b[[2]],b[[3]],b[[4]],b[[5]],
+             b[[6]],b[[7]],b[[8]],b[[9]],b[[11]],
+             b[[12]],b[[13]],b[[14]],
+             ncol=4)
+
+
+
+################################################################################
+################################################################################
+
+colnames(train_set_vis)
+
+is.factor(train_set_vis)
+
+factor_list <- sapply(train_set_vis, is.factor) %>% 
+  which()
+
+b <- list()
+for(i in factor_list) {
+  df_list <- colnames(train_set_vis)[i]
+  
+  b[[i]] <- train_set_vis %>% 
+    rename(aa = df_list) %>% 
+    group_by(aa, hour) %>% 
+    summarise(count = sum(count)) %>% 
+    ggplot(aes(x = hour, y = count, group = aa, colour = aa)) +
+    labs(title = paste0("Count by ",df_list), x = "Hour", y = "Count", color = df_list) + 
+    theme_bw() +
+    geom_line()
+}
+
+grid.arrange(b[[2]],b[[3]],b[[4]],
+             b[[5]],b[[11]],b[[12]],b[[14]],
+             ncol=2)
+################################################################################
+################################################################################
+
+
+
 
 train_set %>% head(1)
 
@@ -119,25 +131,6 @@ ggplot(data = train_set, aes(temp,count)) +
   theme(legend.position = "bottom")
 
 
-b <- list()
-for(i in 1:14) {
-  df_list <- colnames(train_set)[i]
-   
-  b[[i]] <- train_set %>% 
-    select(df_list, count) %>% 
-    rename(aa = df_list) %>% 
-    ggplot(aes(aa,count)) +
-    geom_col(alpha=.2,aes(color = aa)) +
-    labs(title = "시도별 코로나 확진자", x = df_list, y = "",color=df_list) +
-    theme_bw() +  
-    theme(legend.position = "bottom")
-}
-  
-
-grid.arrange(b[[1]],b[[2]],b[[3]],b[[4]],b[[5]],
-             b[[6]],b[[7]],b[[8]],b[[9]],b[[11]],
-             b[[12]],b[[13]],b[[14]],
-             ncol=4)
 
 train_set %>% 
   group_by(wday, hour) %>% 
@@ -161,7 +154,8 @@ aa <- ggplot(data = train_set, aes(temp,count)) +
   labs(color='Temp(C)') +
   theme_bw() +  
   theme(legend.position = "bottom")
-
+aa +
+  scale_size_binned()
 
 # Scatter Plot to show the relationship between count (number of total rentals) and date time.
 bb <- ggplot(data = train_set, aes(datetime,count)) +

@@ -1,5 +1,5 @@
 ---
-title: "bike_sharing(Doing)"
+title: "Bike Sharing Demand (Doing)"
 author: "최의용"
 date: "`r Sys.Date()`"
 output: 
