@@ -120,7 +120,7 @@ ggplot(data = train_set, aes(temp,count)) +
 b <- list()
 for(i in 1:14) {
   df_list <- colnames(train_set)[i]
-  
+   
   b[[i]] <- train_set %>% 
     select(df_list, count) %>% 
     rename(aa = df_list) %>% 
