@@ -130,7 +130,7 @@ for(i in 1:14) {
     theme_bw() +  
     theme(legend.position = "bottom")
 }
-
+ 
 
 grid.arrange(b[[1]],b[[2]],b[[3]],b[[4]],b[[5]],
              b[[6]],b[[7]],b[[8]],b[[9]],b[[11]],
